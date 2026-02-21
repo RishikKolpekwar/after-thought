@@ -22,6 +22,10 @@ export interface Zone {
   baseLoadMW: number;
   /** 0–1, where 1 = most vulnerable to cascading outages */
   vulnerability: number;
+  /** 0–1, how much cooling load spikes in heat dome scenarios */
+  heatSensitivity: number;
+  /** 0–1, probability of discrete flood damage during storm events */
+  floodRisk: number;
 }
 
 export interface GridNode {
@@ -53,7 +57,10 @@ export type ProjectType =
   | 'smart_meter'
   | 'transmission_upgrade'
   | 'community_microgrid'
-  | 'solar_storage';
+  | 'solar_storage'
+  | 'water_infrastructure'
+  | 'district_hvac'
+  | 'emergency_services';
 
 export interface ProjectEffect {
   capacityBoostMW?: number;
@@ -61,6 +68,8 @@ export interface ProjectEffect {
   demandReductionFactor?: number;
   cascadeResistance?: number;
   recoverySpeedBoost?: number;
+  /** 0–1, delays utility service degradation (water/HVAC) during power outages */
+  utilityResilienceBoost?: number;
 }
 
 export interface Project {
@@ -114,7 +123,9 @@ export interface EventLogEntry {
     | 'CASCADE_FAIL'
     | 'ZONE_OUTAGE'
     | 'ZONE_RESTORE'
-    | 'OVERLOAD_WARNING';
+    | 'OVERLOAD_WARNING'
+    | 'ZONE_SHIELDED'
+    | 'FLOOD_DAMAGE';
   nodeId?: NodeId;
   zoneId?: ZoneId;
   fromNodeId?: NodeId;

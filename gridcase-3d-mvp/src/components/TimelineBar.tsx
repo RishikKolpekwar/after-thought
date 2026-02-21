@@ -16,10 +16,11 @@ export default function TimelineBar() {
   } = useSimulationStore();
 
   const selectedScenario = usePlanStore((s) => s.selectedScenario());
-  const duration = currentResult
-    ? currentResult.eventLog.length > 0
-      ? (selectedScenario?.durationHours ?? 96)
-      : 0
+  const historyLength = currentResult
+    ? Object.values(currentResult.nodeStatusHistory)[0]?.length ?? 0
+    : 0;
+  const duration = historyLength > 0
+    ? historyLength
     : selectedScenario?.durationHours ?? 96;
 
   const rafRef = useRef<number | null>(null);

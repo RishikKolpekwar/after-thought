@@ -57,6 +57,16 @@ describe('runSimulation — determinism', () => {
   });
 });
 
+describe('scenario catalog', () => {
+  it('all three scenarios are 6-month (4320h) with full curves', () => {
+    for (const s of [freezeScenario, heatScenario, evScenario]) {
+      expect(s.durationHours).toBe(4320);
+      expect(s.demandCurve.length).toBe(4320);
+      expect(s.weatherStressCurve.length).toBe(4320);
+    }
+  });
+});
+
 // ─── Metric ranges ────────────────────────────────────────────────────────────
 
 describe('runSimulation — metric bounds', () => {
@@ -127,6 +137,32 @@ describe('applyProject + runSimulation — project effects', () => {
 
     expect(improved.metrics.totalOutageHours).toBeLessThanOrEqual(
       base.metrics.totalOutageHours + 1,
+    );
+  });
+
+  it('all projects materially improve six-month reliability under conservative assumptions', () => {
+    const conservative: PlanVersion = makeBasePlan({
+      assumptions: {
+        ...defaultAssumptions,
+        evAdoptionRate: 0,
+        populationGrowthRate: 0,
+        budgetCapUSD: 500_000_000,
+      },
+    });
+
+    const allProjectsPlan: PlanVersion = {
+      ...conservative,
+      id: `${conservative.id}_all`,
+      projects: [...mockProjectCatalog],
+    };
+
+    const base = runSimulation(conservative, freezeScenario, 42);
+    const upgraded = runSimulation(allProjectsPlan, freezeScenario, 42);
+
+    expect(upgraded.metrics.totalOutageHours).toBeLessThan(base.metrics.totalOutageHours);
+    expect(upgraded.metrics.stabilityScore).toBeGreaterThan(base.metrics.stabilityScore);
+    expect(upgraded.eventLog.filter((e) => e.severity === 'critical').length).toBeLessThan(
+      base.eventLog.filter((e) => e.severity === 'critical').length,
     );
   });
 });

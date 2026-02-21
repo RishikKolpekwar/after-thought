@@ -254,8 +254,8 @@ function ScenarioPicker() {
           }}
         >
           <div style={{ fontSize: 12, fontWeight: 700 }}>{scenario.name}</div>
-          <div style={{ fontSize: 10, opacity: 0.75, marginTop: 2 }}>
-            {scenario.durationHours}h · {scenario.description.slice(0, 60)}…
+          <div style={{ fontSize: 10, opacity: 0.75, marginTop: 2, lineHeight: 1.5 }}>
+            {scenario.durationHours}h · {scenario.description}
           </div>
         </button>
       ))}

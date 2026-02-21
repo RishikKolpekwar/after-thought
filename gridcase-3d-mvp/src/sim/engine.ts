@@ -110,17 +110,54 @@ function getCascadeResistance(nodeId: string, plan: PlanVersion): number {
   return clamp(resistance, 0, 0.8);
 }
 
+export function isShielded(nodeId: string, plan: PlanVersion): boolean {
+  return getReliabilityBuffer(nodeId, plan) >= 0.25;
+}
+
+function getReliabilityBuffer(nodeId: string, plan: PlanVersion): number {
+  const node = mockNodes.find((n) => n.id === nodeId);
+  if (!node) return 0;
+
+  let score = 0;
+  for (const proj of plan.projects) {
+    if (proj.nodeId === nodeId || proj.zoneId === node.zoneId) {
+      if (proj.effects.capacityBoostMW) {
+        score += Math.min(0.35, (proj.effects.capacityBoostMW / node.capacityMW) * 0.25);
+      }
+      if (proj.effects.vulnerabilityReduction) {
+        score += proj.effects.vulnerabilityReduction * 0.9;
+      }
+      if (proj.effects.cascadeResistance) {
+        score += proj.effects.cascadeResistance * 0.8;
+      }
+      if (proj.effects.recoverySpeedBoost) {
+        score += proj.effects.recoverySpeedBoost * 0.35;
+      }
+      if (proj.effects.demandReductionFactor) {
+        score += proj.effects.demandReductionFactor * 0.7;
+      }
+    }
+  }
+  return clamp(score, 0, 0.85);
+}
+
 function getRecoveryChance(nodeId: string, plan: PlanVersion): number {
   const node = mockNodes.find((n) => n.id === nodeId);
   if (!node) return 0.03;
 
-  let base = 0.03;
+  let base = 0.08;
   for (const proj of plan.projects) {
     if ((proj.nodeId === nodeId || proj.zoneId === node.zoneId) && proj.effects.recoverySpeedBoost) {
-      base += proj.effects.recoverySpeedBoost * 0.05;
+      base += proj.effects.recoverySpeedBoost * 0.18;
+    }
+    if ((proj.nodeId === nodeId || proj.zoneId === node.zoneId) && proj.effects.vulnerabilityReduction) {
+      base += proj.effects.vulnerabilityReduction * 0.09;
+    }
+    if ((proj.nodeId === nodeId || proj.zoneId === node.zoneId) && proj.effects.cascadeResistance) {
+      base += proj.effects.cascadeResistance * 0.06;
     }
   }
-  return clamp(base, 0, 0.25);
+  return clamp(base, 0, 0.75);
 }
 
 // Breadth-first cascade propagation
@@ -157,9 +194,14 @@ function cascadeFailure(
       const neighbor = nodes.find((n) => n.id === neighborId);
       if (!neighbor) continue;
 
+      // Shielded nodes absorb cascade without failing
+      if (isShielded(neighborId, plan)) continue;
+
       const cascadeResistance = getCascadeResistance(neighborId, plan);
+      const neighborVulnerability = getZoneVulnerability(neighbor.zoneId, plan);
       const baseProbability = neighbor.critical ? 0.25 : 0.15;
-      const effectiveProbability = baseProbability * (1 - cascadeResistance);
+      const effectiveProbability =
+        baseProbability * (0.35 + neighborVulnerability) * (1 - cascadeResistance);
 
       if (rng() < effectiveProbability) {
         nodeStatuses.set(neighborId, 'failed');
@@ -216,15 +258,30 @@ export function runSimulation(
     for (const node of nodes) {
       if (nodeStatuses.get(node.id) === 'failed') continue;
 
-      const zoneLoad = getZoneBaseLoad(node.zoneId, plan) * demandMultiplier;
+      const zone = mockZones.find((z) => z.id === node.zoneId)!;
+      const baseLoad = getZoneBaseLoad(node.zoneId, plan) * demandMultiplier;
+
+      // Heat sensitivity amplifies cooling load in heat dome scenarios
+      const heatAmplifier = scenario.id === 'sc-heat-dome'
+        ? 1 + zone.heatSensitivity * weatherStress * 0.6
+        : 1.0;
+      const zoneLoad = baseLoad * heatAmplifier;
+
       const vuln = getZoneVulnerability(node.zoneId, plan);
-      const effectiveCapacity = node.capacityMW * (1 - weatherStress * 0.4 * vuln);
+      const reliabilityBuffer = getReliabilityBuffer(node.id, plan);
+
+      // Old infrastructure suffers greater capacity loss during freezes
+      const freezeAgeAmplifier = scenario.id === 'sc-freeze'
+        ? 1 + zone.infraAgeIndex * 0.4
+        : 1.0;
+      const effectiveCapacity = node.capacityMW * (1 - weatherStress * 0.4 * vuln * freezeAgeAmplifier);
       const stressRatio = zoneLoad / effectiveCapacity;
 
       peakStressLevel = Math.max(peakStressLevel, stressRatio);
 
       // Overload warning at 85% capacity
-      if (stressRatio > 0.85 && !alreadyWarnedOverload.has(node.id)) {
+      const warningThreshold = 0.85 + reliabilityBuffer * 0.08;
+      if (stressRatio > warningThreshold && !alreadyWarnedOverload.has(node.id)) {
         alreadyWarnedOverload.add(node.id);
         eventLog.push({
           timestep: t,
@@ -236,23 +293,68 @@ export function runSimulation(
         });
       }
 
-      // Node failure at > 100% capacity, modulated by vulnerability and randomness
-      const failureThreshold = 1.0 + rng() * 0.15; // small random headroom
-      if (stressRatio >= failureThreshold || (stressRatio > 0.92 && rng() < 0.12 * vuln)) {
-        nodeStatuses.set(node.id, 'failed');
-        failedAtTimestep.set(node.id, t);
+      // Shielded nodes are immune to load-driven and shoulder failures
+      if (isShielded(node.id, plan)) {
+        if (stressRatio >= 1.0 && !alreadyWarnedOverload.has(`shield-${node.id}`)) {
+          alreadyWarnedOverload.add(`shield-${node.id}`);
+          eventLog.push({
+            timestep: t,
+            type: 'ZONE_SHIELDED',
+            nodeId: node.id,
+            zoneId: node.zoneId,
+            message: `${node.label} protected — project investments absorbed overload (stress=${(stressRatio * 100).toFixed(0)}%)`,
+            severity: 'info',
+          });
+        }
+        // Skip failure roll — continue to flood risk check below
+      } else {
+        // Node failure at > 100% capacity, modulated by vulnerability and randomness
+        const failureThreshold = 1.0 + rng() * 0.15 + reliabilityBuffer * 0.25;
+        const shoulderThreshold = 0.92 + reliabilityBuffer * 0.07;
+        const shoulderFailureProbability =
+          0.12 * vuln * (1 - reliabilityBuffer) * (1 - reliabilityBuffer * 0.7);
+        if (
+          stressRatio >= failureThreshold ||
+          (stressRatio > shoulderThreshold && rng() < shoulderFailureProbability)
+        ) {
+          nodeStatuses.set(node.id, 'failed');
+          failedAtTimestep.set(node.id, t);
 
-        eventLog.push({
-          timestep: t,
-          type: 'NODE_FAIL',
-          nodeId: node.id,
-          zoneId: node.zoneId,
-          message: `${node.label} failed — load exceeded capacity (stress=${(stressRatio * 100).toFixed(0)}%)`,
-          severity: 'critical',
-        });
+          eventLog.push({
+            timestep: t,
+            type: 'NODE_FAIL',
+            nodeId: node.id,
+            zoneId: node.zoneId,
+            message: `${node.label} failed — load exceeded capacity (stress=${(stressRatio * 100).toFixed(0)}%)`,
+            severity: 'critical',
+          });
 
-        // Cascade propagation
-        cascadeFailure(node.id, edges, nodes, nodeStatuses, t, eventLog, rng, plan, cascadeCounter);
+          // Cascade propagation
+          cascadeFailure(node.id, edges, nodes, nodeStatuses, t, eventLog, rng, plan, cascadeCounter);
+        }
+      }
+
+      // Flood damage: discrete failure during storm stress peaks — shielded zones are immune
+      if (
+        scenario.id === 'sc-freeze' &&
+        weatherStress > 0.5 &&
+        nodeStatuses.get(node.id) === 'operational' &&
+        !isShielded(node.id, plan)
+      ) {
+        const floodProb = zone.floodRisk * (weatherStress - 0.5) * 2;
+        if (rng() < floodProb) {
+          nodeStatuses.set(node.id, 'failed');
+          failedAtTimestep.set(node.id, t);
+          eventLog.push({
+            timestep: t,
+            type: 'FLOOD_DAMAGE',
+            nodeId: node.id,
+            zoneId: node.zoneId,
+            message: `${node.label} damaged by flooding — storm stress exceeded drainage capacity`,
+            severity: 'critical',
+          });
+          cascadeFailure(node.id, edges, nodes, nodeStatuses, t, eventLog, rng, plan, cascadeCounter);
+        }
       }
     }
 
@@ -268,7 +370,6 @@ export function runSimulation(
         const recoveryChance = getRecoveryChance(node.id, plan);
         if (rng() < recoveryChance) {
           nodeStatuses.set(node.id, 'operational');
-          alreadyWarnedOverload.delete(node.id);
           failedAtTimestep.delete(node.id);
 
           eventLog.push({
@@ -419,6 +520,16 @@ export function exportSnapshot(
 
 export function getZoneById(id: string): Zone | undefined {
   return mockZones.find((z) => z.id === id);
+}
+
+export function getZoneUtilityResilience(zoneId: string, plan: PlanVersion): number {
+  let boost = 0;
+  for (const proj of plan.projects) {
+    if (proj.zoneId === zoneId && proj.effects.utilityResilienceBoost) {
+      boost += proj.effects.utilityResilienceBoost;
+    }
+  }
+  return clamp(boost, 0, 1);
 }
 
 export function getTotalCapex(plan: PlanVersion): number {

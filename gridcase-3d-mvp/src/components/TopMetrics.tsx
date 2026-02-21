@@ -1,5 +1,7 @@
+import { useMemo } from 'react';
 import { useSimulationStore } from '../stores/simulationStore';
 import { usePlanStore } from '../stores/planStore';
+import { mockNodes } from '../data/mockAustin';
 
 function ScoreGauge({ label, value, color }: { label: string; value: number; color: string }) {
   const pct = Math.round(value * 100);
@@ -64,7 +66,7 @@ function MetricBadge({ label, value, unit, warn }: { label: string; value: strin
 }
 
 export default function TopMetrics() {
-  const { status, currentResult } = useSimulationStore();
+  const { status, currentResult, timelinePosition } = useSimulationStore();
   const overBudget = usePlanStore((s) => s.overBudget());
   const totalCapex = usePlanStore((s) => s.totalCapex());
   const budgetCap = usePlanStore((s) => s.currentPlan.assumptions.budgetCapUSD);
@@ -78,6 +80,32 @@ export default function TopMetrics() {
 
   const metrics = currentResult?.metrics;
   const hasResult = status === 'done' && metrics;
+
+  const { outageHoursDisplay, outageIsToDate } = useMemo(() => {
+    if (!currentResult) return { outageHoursDisplay: 0, outageIsToDate: false };
+
+    const sampleHistory = Object.values(currentResult.nodeStatusHistory)[0];
+    const hours = sampleHistory?.length ?? 0;
+    if (hours === 0) return { outageHoursDisplay: currentResult.metrics.totalOutageHours, outageIsToDate: false };
+
+    const idx = Math.max(0, Math.min(Math.floor(timelinePosition), hours - 1));
+    const atEnd = idx >= hours - 1;
+    if (atEnd) {
+      return { outageHoursDisplay: currentResult.metrics.totalOutageHours, outageIsToDate: false };
+    }
+
+    let outageSoFar = 0;
+    for (let t = 0; t <= idx; t++) {
+      const failedZones = new Set<string>();
+      for (const node of mockNodes) {
+        const history = currentResult.nodeStatusHistory[node.id];
+        if (history?.[t] === 'failed') failedZones.add(node.zoneId);
+      }
+      outageSoFar += failedZones.size;
+    }
+
+    return { outageHoursDisplay: outageSoFar, outageIsToDate: true };
+  }, [currentResult, timelinePosition]);
 
   return (
     <div
@@ -144,10 +172,10 @@ export default function TopMetrics() {
             color="#60a5fa"
           />
           <MetricBadge
-            label="Outage Hours (total)"
-            value={`${metrics.totalOutageHours.toFixed(0)}`}
+            label={outageIsToDate ? 'Outage Hours (to date)' : 'Outage Hours (total)'}
+            value={`${outageHoursDisplay.toFixed(0)}`}
             unit="zone·h"
-            warn={metrics.totalOutageHours > 50}
+            warn={outageHoursDisplay > 50}
           />
           <MetricBadge
             label="Cascades"

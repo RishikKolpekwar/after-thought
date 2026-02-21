@@ -34,7 +34,7 @@ interface PlanStore {
   activeSeed: number;
 
   // Layer toggles for 3D viewport
-  layerMode: 'outage' | 'income' | 'vulnerability' | 'infra-age';
+  layerMode: 'outage' | 'income' | 'vulnerability' | 'infra-age' | 'utilities';
 
   // Actions
   setRole: (role: Role) => void;
@@ -60,7 +60,7 @@ export const usePlanStore = create<PlanStore>((set, get) => ({
   role: 'utility_planner',
   currentPlan: makeInitialPlan('utility_planner'),
   baselinePlan: null,
-  selectedScenarioId: mockScenarios[0].id,
+  selectedScenarioId: mockScenarios.find((s) => s.id === 'sc-six-month')?.id ?? mockScenarios[0].id,
   activeSeed: 42,
   layerMode: 'outage',
 

@@ -42,6 +42,15 @@ const LAYER_LEGENDS: Record<string, { title: string; items: LegendItem[] }> = {
       { color: '#f87171', label: 'End-of-life (> 80%)' },
     ],
   },
+  utilities: {
+    title: 'Utility Services',
+    items: [
+      { color: '#22c55e', label: 'All utilities operational' },
+      { color: '#fbbf24', label: 'Water pressure reduced' },
+      { color: '#f97316', label: 'HVAC / heating offline' },
+      { color: '#dc2626', label: 'Critical — water + heat/AC down' },
+    ],
+  },
 };
 
 const NODE_LEGEND: LegendItem[] = [
