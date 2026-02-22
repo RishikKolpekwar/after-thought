@@ -4,16 +4,6 @@ An offline, browser-based tool for simulating and stress-testing power grid inve
 
 ---
 
-## Quick Start
-
-```bash
-npm install
-npm run dev      # opens at http://localhost:5173
-npm test         # 20 unit tests
-```
-
----
-
 ## Layout Overview
 
 ```
@@ -34,7 +24,7 @@ npm test         # 20 unit tests
 
 ## The 3D Viewport
 
-The map shows **15 Austin-like neighborhoods** as flat colored tiles, **14 substations** as spheres, and **20 transmission lines** connecting them.
+The map shows **Austin-like neighborhoods** as flat colored tiles, **14 substations** as spheres, and **20 transmission lines** connecting them.
 
 ### Layer Toggles (top-left buttons)
 

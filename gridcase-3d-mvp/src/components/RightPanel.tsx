@@ -4,6 +4,7 @@ import { useSimulationStore } from '../stores/simulationStore';
 import { mockProjectCatalog, mockScenarios } from '../data/mockAustin';
 import { runSimulation } from '../sim/engine';
 import { Project, Role, Assumptions } from '../types/grid';
+import AIAnalysisPanel from './AIAnalysisPanel';
 
 // ─── Section wrapper ──────────────────────────────────────────────────────────
 
@@ -334,7 +335,7 @@ function AssumptionsPanel() {
         label="Budget Cap"
         field="budgetCapUSD"
         min={50_000_000}
-        max={500_000_000}
+        max={700_000_000}
         step={5_000_000}
         format={(v) => `$${(v / 1_000_000).toFixed(0)}M`}
       />
@@ -545,6 +546,10 @@ export default function RightPanel() {
 
       <Section title="Run">
         <RunControls />
+      </Section>
+
+      <Section title="Custom Project (AI)" defaultOpen={true}>
+        <AIAnalysisPanel />
       </Section>
 
       <Section title="Project Catalog">

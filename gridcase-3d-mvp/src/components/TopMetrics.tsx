@@ -71,6 +71,19 @@ export default function TopMetrics() {
   const totalCapex = usePlanStore((s) => s.totalCapex());
   const budgetCap = usePlanStore((s) => s.currentPlan.assumptions.budgetCapUSD);
   const role = usePlanStore((s) => s.role);
+  const selectedScenarioId = usePlanStore((s) => s.selectedScenarioId);
+  const projects = usePlanStore((s) => s.currentPlan.projects);
+  const assumptions = usePlanStore((s) => s.currentPlan.assumptions);
+
+  const visualizerUrl = useMemo(() => {
+    try {
+      const state = { scenario: selectedScenarioId, projects, assumptions };
+      const encoded = btoa(JSON.stringify(state));
+      return `http://localhost:5175/?state=${encoded}`;
+    } catch {
+      return 'http://localhost:5175/';
+    }
+  }, [selectedScenarioId, projects, assumptions]);
 
   const roleLabel: Record<string, string> = {
     utility_planner: 'Utility Planner',
@@ -189,6 +202,33 @@ export default function TopMetrics() {
           {status === 'running' ? '⏳ Simulating…' : 'No simulation run yet — configure and run a scenario.'}
         </div>
       )}
+
+      {/* Spacer */}
+      <div style={{ flex: 1 }} />
+
+      {/* Open Visualizer button */}
+      <a
+        href={visualizerUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 6,
+          padding: '6px 16px',
+          borderRadius: 8,
+          background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+          color: '#fff',
+          fontSize: 12,
+          fontWeight: 700,
+          textDecoration: 'none',
+          flexShrink: 0,
+          cursor: 'pointer',
+          border: 'none',
+        }}
+      >
+        Open Visualizer
+      </a>
     </div>
   );
 }
