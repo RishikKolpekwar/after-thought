@@ -4,6 +4,13 @@
   <img src="./assets/afterthought-wordmark.svg" alt="AfterThought logo" width="420" />
 </p>
 
+## Team
+
+- Rishik Kolpekwar
+- Amogh Thodati
+- Vishal Rajkumar
+- Zeynep Sahin
+
 Make Disaster an Afterthought. Use today's data to prepare for the future.
 
 AfterThought is a multi-app resilience planning workflow:
@@ -83,10 +90,3 @@ AfterThought/
 ├── afterthoughtmap/        # ArcGIS 3D visualizer
 └── assets/                 # Shared media (logo used in this README)
 ```
-
-## Team
-
-- Rishik Kolpekwar
-- Amogh Thodati
-- Vishal Rajkumar
-- Zeynep Sahin
